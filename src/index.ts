@@ -2,6 +2,7 @@ import mimicFn from "mimic-fn";
 
 interface CacheItem {
   data: Promise<any>;
+  timestamp: number;
   maxAge: number;
   staleWhileRevalidate?: number;
   staleIfError?: number;
@@ -38,17 +39,21 @@ function reMem<
     fnPromise: Promise<ReturnType>,
     timestamp: number
   ): void => {
+    const timeoutTime = Math.max(
+      maxAge,
+      staleIfError ? staleIfError + maxAge : 0,
+      staleWhileRevalidate ? staleWhileRevalidate + maxAge : 0
+    );
     cache.set(key, {
       data: fnPromise,
-      maxAge: timestamp + maxAge,
-      staleWhileRevalidate: staleWhileRevalidate
-        ? timestamp + staleWhileRevalidate
-        : undefined,
-      staleIfError: staleIfError ? timestamp + staleIfError : undefined,
-      timeout: Number.isFinite(maxAge)
+      timestamp,
+      maxAge,
+      staleWhileRevalidate,
+      staleIfError,
+      timeout: Number.isFinite(timeoutTime)
         ? setTimeout(() => {
             cache.delete(key);
-          }, maxAge)
+          }, timeoutTime)
         : undefined,
     });
   };
@@ -62,56 +67,18 @@ function reMem<
     const now = Date.now();
 
     if (cacheItem) {
-      console.debug("Cache item found");
-
-      if (cacheItem.maxAge < now) {
-        console.debug("Cache item expired. Resolve new one.");
-
-        cache.delete(key);
-      } else {
-        if (staleWhileRevalidate) {
-          if (
-            cacheItem.staleWhileRevalidate &&
-            cacheItem.staleWhileRevalidate < now
-          ) {
-            console.debug("REVALIDATE");
-            const fnPromise = Promise.resolve().then(() =>
-              fn.apply(this, args)
-            );
-
-            fnPromise
-              .then((res) => {
-                if (cacheItem.timeout) {
-                  clearTimeout(cacheItem.timeout);
-                }
-
-                setCacheItem(key, fnPromise, now);
-
-                return res;
-              })
-              .catch((err) => {
-                if (
-                  staleIfError &&
-                  cacheItem.staleIfError &&
-                  cacheItem.staleIfError > now
-                ) {
-                  return;
-                }
-
-                console.debug("Stale not used for error");
-                setCacheItem(key, fnPromise, now);
-              });
-
-            return cacheItem.data;
-          }
-        } else if (
-          staleIfError &&
-          cacheItem.staleIfError &&
-          cacheItem.staleIfError > now
+      if (cacheItem.timestamp + cacheItem.maxAge < now) {
+        if (
+          staleWhileRevalidate &&
+          cacheItem.staleWhileRevalidate &&
+          cacheItem.timestamp +
+            cacheItem.maxAge +
+            cacheItem.staleWhileRevalidate >
+            now
         ) {
-          console.debug("CALL WITH STALE IF ERROR");
           const fnPromise = Promise.resolve().then(() => fn.apply(this, args));
-          return fnPromise
+
+          fnPromise
             .then((res) => {
               if (cacheItem.timeout) {
                 clearTimeout(cacheItem.timeout);
@@ -121,24 +88,24 @@ function reMem<
 
               return res;
             })
-            .catch((err) => {
-              if (
-                staleIfError &&
-                cacheItem.staleIfError &&
-                cacheItem.staleIfError > now
-              ) {
-                return cacheItem.data;
-              }
-
-              console.debug("Stale not returned for error");
-              throw err;
+            .catch(() => {
+              // Ignore error after revalidation
             });
+
+          return cacheItem.data;
         }
 
+        if (
+          staleIfError &&
+          cacheItem.staleIfError &&
+          cacheItem.timestamp + cacheItem.maxAge + cacheItem.staleIfError > now
+        ) {
+          const fnPromise = Promise.resolve().then(() => fn.apply(this, args));
+          return fnPromise.catch(() => cacheItem.data);
+        }
+      } else {
         return cacheItem.data;
       }
-    } else {
-      console.debug("👎 NO ITEM IN CACHE");
     }
 
     const fnPromise = Promise.resolve().then(() => fn.apply(this, args));
