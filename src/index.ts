@@ -13,6 +13,7 @@ interface Options {
   cacheKey?: Function;
   cache?: Map<any, CacheItem>;
   maxAge?: number;
+  cacheError?: boolean;
   staleWhileRevalidate?: number;
   staleIfError?: number;
 }
@@ -30,6 +31,7 @@ function reMem<
     cacheKey,
     cache = new Map(),
     maxAge = Infinity,
+    cacheError = false,
     staleWhileRevalidate,
     staleIfError,
   }: Options = {}
@@ -44,6 +46,7 @@ function reMem<
       staleIfError ? staleIfError + maxAge : 0,
       staleWhileRevalidate ? staleWhileRevalidate + maxAge : 0
     );
+
     cache.set(key, {
       data: fnPromise,
       timestamp,
@@ -113,10 +116,13 @@ function reMem<
     setCacheItem(key, fnPromise, now);
 
     return fnPromise.catch((err) => {
-      const cacheItem = cache.get(key);
+      if (!cacheError) {
+        const cacheItem = cache.get(key);
 
-      if (cacheItem?.timeout) {
-        clearTimeout(cacheItem.timeout);
+        if (cacheItem?.timeout) {
+          clearTimeout(cacheItem.timeout);
+        }
+
         cache.delete(key);
       }
 
