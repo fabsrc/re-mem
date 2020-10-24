@@ -1,4 +1,4 @@
-import reMem from "..";
+import reMem, { clear } from "..";
 
 describe("reMem", () => {
   afterEach(() => {
@@ -28,6 +28,28 @@ describe("reMem", () => {
     await expect(memFn).rejects.toThrow(testErr);
   });
 
+  describe("cacheKey", () => {
+    it("use first argument as cache key by default", async () => {
+      const testCache = new Map();
+      const testFn = jest.fn();
+      const memFn = reMem(testFn, { cache: testCache });
+      await memFn(1, 2, 3);
+      expect(testCache.has(1)).toBe(true);
+    });
+
+    it("calls function to generate cache key", async () => {
+      const testCache = new Map();
+      const testFn = jest.fn();
+      const testCacheKeyFn = jest.fn().mockReturnValue("testKey");
+      const memFn = reMem(testFn, {
+        cache: testCache,
+        cacheKey: testCacheKeyFn,
+      });
+      await memFn(1, 2, 3);
+      expect(testCacheKeyFn).toHaveBeenCalledWith([1, 2, 3]);
+      expect(testCache.has("testKey")).toBe(true);
+    });
+  });
   describe("maxAge", () => {
     beforeEach(() => {
       jest.useFakeTimers("modern");
@@ -42,7 +64,7 @@ describe("reMem", () => {
       expect(testFn).toBeCalledTimes(1);
     });
 
-    it("returns cached promise for defined max age", async () => {
+    it("returns cached promise for defined maxAge", async () => {
       const testFn = jest.fn().mockResolvedValue("test");
       const testMemFn = reMem(testFn, { maxAge: 100 });
       await testMemFn();
@@ -54,6 +76,16 @@ describe("reMem", () => {
       jest.advanceTimersByTime(51);
       await testMemFn();
       expect(testFn).toBeCalledTimes(2);
+    });
+
+    it("removes promise from cache after maxAge", async () => {
+      const testCache = new Map();
+      const testFn = jest.fn().mockResolvedValue("test");
+      const testMemFn = reMem(testFn, { maxAge: 100, cache: testCache });
+      await testMemFn();
+      expect(testCache.size).toBe(1);
+      jest.advanceTimersByTime(101);
+      expect(testCache.size).toBe(0);
     });
   });
 
@@ -99,6 +131,47 @@ describe("reMem", () => {
       await expect(testMemFn()).resolves.toEqual("fourth");
     });
   });
+
+  describe("staleIfError", () => {
+    beforeEach(() => {
+      jest.useFakeTimers("modern");
+    });
+
+    it("returns stale data on error after maxAge but before staleIfError ends", async () => {
+      const testError = new Error("testError");
+      const testFn = jest
+        .fn()
+        .mockResolvedValueOnce("first")
+        .mockRejectedValue(testError);
+      const testMemFn = reMem(testFn, {
+        maxAge: 100,
+        staleIfError: 500,
+      });
+      await expect(testMemFn()).resolves.toEqual("first");
+      jest.advanceTimersByTime(101);
+      await expect(testMemFn()).resolves.toEqual("first");
+      expect(testFn).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not return stale data on error after maxAge + staleIfError", async () => {
+      const testError = new Error("testError");
+      const testFn = jest
+        .fn()
+        .mockResolvedValueOnce("first")
+        .mockRejectedValue(testError);
+      const testMemFn = reMem(testFn, {
+        maxAge: 100,
+        staleWhileRevalidate: 500,
+      });
+      await expect(testMemFn()).resolves.toEqual("first");
+      jest.advanceTimersByTime(101);
+      await expect(testMemFn()).resolves.toEqual("first");
+      jest.advanceTimersByTime(500);
+      await expect(testMemFn()).rejects.toEqual(testError);
+      expect(testFn).toHaveBeenCalledTimes(3);
+    });
+  });
+
   describe("cacheError", () => {
     const testErr = new Error("TestError");
 
@@ -122,5 +195,29 @@ describe("reMem", () => {
         expect(testFn).toHaveBeenCalledTimes(1);
       });
     });
+  });
+});
+
+describe("clear", () => {
+  it("throws error if function was not memoized", () => {
+    const testFn = jest.fn();
+    expect(() => clear(testFn)).toThrowError(
+      "Can't clear a function that was not memoized!"
+    );
+  });
+
+  it("throws error if used cache has no clear method", async () => {
+    const testFn = jest.fn();
+    const memFn = reMem(testFn, { cache: {} as any });
+    expect(() => clear(memFn)).toThrowError("The cache Map can't be cleared!");
+  });
+
+  it("clears cache of memoized function", async () => {
+    const testFn = jest.fn();
+    const memFn = reMem(testFn);
+    await memFn();
+    clear(memFn);
+    await memFn();
+    expect(testFn).toHaveBeenCalledTimes(2);
   });
 });

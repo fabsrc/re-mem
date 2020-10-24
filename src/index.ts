@@ -139,13 +139,15 @@ function reMem<
 
 export default reMem;
 
-export const clear = (fn: Function) => {
-  if (!cacheStore.has(fn)) {
-    throw new Error("Can't clear a function that was not memoized!");
+export const clear = (fn: Function): void => {
+  const cache = cacheStore.get(fn);
+  if (!cache) {
+    throw new TypeError("Can't clear a function that was not memoized!");
   }
 
-  const cache = cacheStore.get(fn);
-  if (typeof cache.clear === "function") {
-    cache.clear();
+  if (typeof cache.clear !== "function") {
+    throw new TypeError("The cache Map can't be cleared!");
   }
+
+  cache.clear();
 };
