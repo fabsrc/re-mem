@@ -1,7 +1,9 @@
 import mimicFn from "mimic-fn";
 
-interface CacheItem {
-  data: Promise<any>;
+type AnyFunction = (...arguments_: any) => any;
+
+interface CacheItem<Value> {
+  data: Promise<Value>;
   timestamp: number;
   maxAge: number;
   staleWhileRevalidate?: number;
@@ -9,24 +11,30 @@ interface CacheItem {
   timeout?: NodeJS.Timeout;
 }
 
-interface Options {
-  cacheKey?: Function;
-  cache?: Map<any, CacheItem>;
+interface CacheStorage<KeyType, ValueType> {
+  has: (key: KeyType) => boolean;
+  get: (key: KeyType) => CacheItem<ValueType> | undefined;
+  set: (key: KeyType, value: CacheItem<ValueType>) => void;
+  delete: (key: KeyType) => void;
+  clear?: () => void;
+}
+
+interface Options<FunctionToMemoize extends AnyFunction, CacheKeyType> {
   maxAge?: number;
+  cacheKey?: (arguments_: Parameters<FunctionToMemoize>) => CacheKeyType;
+  cache?: CacheStorage<CacheKeyType, ReturnType<FunctionToMemoize>>;
   cacheError?: boolean;
   staleWhileRevalidate?: number;
   staleIfError?: number;
 }
 
-const cacheStore = new WeakMap();
+const cacheStore = new WeakMap<AnyFunction>();
 
 function reMem<
-  ArgumentsType extends unknown[],
-  ReturnType
-  // CacheKeyType
-  // FunctionToMemoize = (...args: ArgumentsType) => ReturnType
+  FunctionToMemoize extends AnyFunction,
+	CacheKeyType
 >(
-  fn: (...args: ArgumentsType) => Promise<ReturnType>,
+  fn: FunctionToMemoize,
   {
     cacheKey,
     cache = new Map(),
@@ -34,11 +42,11 @@ function reMem<
     cacheError = false,
     staleWhileRevalidate,
     staleIfError,
-  }: Options = {}
-): (...args: ArgumentsType) => Promise<ReturnType> {
+  }: Options<FunctionToMemoize, CacheKeyType> = {}
+): FunctionToMemoize {
   const setCacheItem = (
     key: any,
-    fnPromise: Promise<ReturnType>,
+    fnPromise: Promise<ReturnType<FunctionToMemoize>>,
     timestamp: number
   ): void => {
     const timeoutTime = Math.max(
@@ -62,9 +70,9 @@ function reMem<
   };
 
   const reMemFn = async function (
-    this: Function,
-    ...args: ArgumentsType
-  ): Promise<ReturnType> {
+    this: FunctionToMemoize,
+    ...args: Parameters<FunctionToMemoize>
+  ): Promise<ReturnType<FunctionToMemoize>> {
     const key = cacheKey ? cacheKey(args) : args[0];
     const cacheItem = cache.get(key);
     const now = Date.now();
@@ -134,12 +142,12 @@ function reMem<
 
   cacheStore.set(reMemFn, cache);
 
-  return reMemFn;
+  return reMemFn as FunctionToMemoize;
 }
 
 export default reMem;
 
-export const clear = (fn: Function): void => {
+export const clear = (fn: AnyFunction): void => {
   const cache = cacheStore.get(fn);
   if (!cache) {
     throw new TypeError("Can't clear a function that was not memoized!");
