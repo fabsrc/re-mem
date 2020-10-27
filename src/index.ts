@@ -23,7 +23,7 @@ interface Options<FunctionToMemoize extends AnyFunction, CacheKeyType> {
   maxAge?: number;
   cacheKey?: (arguments_: Parameters<FunctionToMemoize>) => CacheKeyType;
   cache?: CacheStorage<CacheKeyType, ReturnType<FunctionToMemoize>>;
-  cacheError?: boolean;
+  cachePromiseRejection?: boolean;
   staleWhileRevalidate?: number;
   staleIfError?: number;
 }
@@ -39,7 +39,7 @@ function reMem<
     cacheKey,
     cache = new Map(),
     maxAge = Infinity,
-    cacheError = false,
+    cachePromiseRejection = false,
     staleWhileRevalidate,
     staleIfError,
   }: Options<FunctionToMemoize, CacheKeyType> = {}
@@ -124,7 +124,7 @@ function reMem<
     setCacheItem(key, fnPromise, now);
 
     return fnPromise.catch((err) => {
-      if (!cacheError) {
+      if (!cachePromiseRejection) {
         const cacheItem = cache.get(key);
 
         if (cacheItem?.timeout) {

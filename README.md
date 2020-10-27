@@ -33,7 +33,7 @@ getDataMemoized(123)
 
 - `cacheKey` Function that returns a cache key based on arguments passed to a function. By default the first argument is used as cache key
 - `cache` Custom cache to store data in. (Default: `new Map()`)
-- `cacheError` Boolean flag wether to cache errors or not (Default: `false`)
+- `cachePromiseRejection` Boolean flag wether to cache rejected Promises or not (Default: `false`)
 - `maxAge` Time in ms to return the cached promise (Default: `Infinity`)
 - `staleWhileRevalidate` Time in ms to return stale data while revalidating the data in the background. The time starts after `maxAge` runs out.
 - `staleIfError` Time in ms to return stale data if original promise rejects with an error.

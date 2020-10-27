@@ -172,7 +172,7 @@ describe("reMem", () => {
     });
   });
 
-  describe("cacheError", () => {
+  describe("cachePromiseRejection", () => {
     const testErr = new Error("TestError");
 
     describe("when set to false (default)", () => {
@@ -188,7 +188,7 @@ describe("reMem", () => {
     describe("when set to true", () => {
       it("returns cached rejected promise", async () => {
         const testFn = jest.fn().mockRejectedValue(testErr);
-        const testMemFn = reMem(testFn, { cacheError: true });
+        const testMemFn = reMem(testFn, { cachePromiseRejection: true });
         await expect(testMemFn()).rejects.toThrow();
         await expect(testMemFn()).rejects.toThrow();
         await expect(testMemFn()).rejects.toThrow();
