@@ -7,13 +7,13 @@
 ## Install
 
 ```shell
-npm install -S re-mem
+npm install -S @fabsrc/re-mem
 ```
 
 ## Usage
 
 ```js
-import reMem from "re-mem"
+import reMem from "@fabsrc/re-mem"
 
 function getData(id) {
   return Promise.resolve(`Data: ${id}`)
