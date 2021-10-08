@@ -1,6 +1,6 @@
 {
   "name": "@fabsrc/re-mem",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Memoization with stale-while-revalidate and stale-if-error",
   "main": "dist/index",
   "scripts": {
