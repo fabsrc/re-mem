@@ -41,20 +41,20 @@ function reMem<
     maxAge = Infinity,
     cachePromiseRejection = false,
     staleWhileRevalidate,
-    staleIfError,
+    staleIfError, // values less than staleWhileRevalidate are ignored
   }: Options<FunctionToMemoize, CacheKeyType> = {}
 ): FunctionToMemoize {
+  const timeoutTime = Math.max(
+    maxAge,
+    staleIfError ? staleIfError + maxAge : 0,
+    staleWhileRevalidate ? staleWhileRevalidate + maxAge : 0
+  );
+
   const setCacheItem = (
     key: any,
     fnPromise: Promise<ReturnType<FunctionToMemoize>>,
     timestamp: number
   ): void => {
-    const timeoutTime = Math.max(
-      maxAge,
-      staleIfError ? staleIfError + maxAge : 0,
-      staleWhileRevalidate ? staleWhileRevalidate + maxAge : 0
-    );
-
     cache.set(key, {
       data: fnPromise,
       timestamp,
@@ -78,7 +78,33 @@ function reMem<
     const now = Date.now();
 
     if (cacheItem) {
-      if (cacheItem.timestamp + cacheItem.maxAge < now) {
+      // no expiry
+      if (cacheItem.timeout === undefined) {
+        return cacheItem.data;
+      }
+
+      // within maxAge
+      if (cacheItem.timestamp + cacheItem.maxAge > now) {
+        return cacheItem.data;
+      }
+
+      // should we try another request?
+      // this is after maxAge and before staleWhileRevalidate or staleIfError
+      // istanbul ignore else - we fall through to making a request later
+      if (cacheItem.timestamp + timeoutTime > now) {
+        const fnPromise = Promise.resolve().then(() => fn.apply(this, args));
+
+        // always put a success in the cache
+        const p = fnPromise.then((res) => {
+          // no timeout is the first case in the outer if (no expiry)
+          clearTimeout(cacheItem.timeout as NodeJS.Timeout);
+
+          setCacheItem(key, fnPromise, now);
+
+          return res;
+        });
+
+        // staleWhileRevalidate takes precedence over staleIfError
         if (
           staleWhileRevalidate &&
           cacheItem.staleWhileRevalidate &&
@@ -87,35 +113,17 @@ function reMem<
             cacheItem.staleWhileRevalidate >
             now
         ) {
-          const fnPromise = Promise.resolve().then(() => fn.apply(this, args));
-
-          fnPromise
-            .then((res) => {
-              if (cacheItem.timeout) {
-                clearTimeout(cacheItem.timeout);
-              }
-
-              setCacheItem(key, fnPromise, now);
-
-              return res;
-            })
-            .catch(() => {
-              // Ignore error after revalidation
-            });
-
+          // ignore errors after revalidation
+          p.catch(() => {});
           return cacheItem.data;
         }
 
-        if (
-          staleIfError &&
-          cacheItem.staleIfError &&
-          cacheItem.timestamp + cacheItem.maxAge + cacheItem.staleIfError > now
-        ) {
-          const fnPromise = Promise.resolve().then(() => fn.apply(this, args));
-          return fnPromise.catch(() => cacheItem.data);
-        }
-      } else {
-        return cacheItem.data;
+        // we're within staleIfError
+        return p.catch(() => {
+          // TODO logging, and it'd be great to capture this somewhere so the
+          // app could find out it's happened
+          return cacheItem.data;
+        });
       }
     }
 
