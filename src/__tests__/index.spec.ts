@@ -135,15 +135,28 @@ describe("reMem", () => {
       const testFn = jest
         .fn()
         .mockResolvedValueOnce("first")
-        .mockRejectedValueOnce(new Error('failed background request'));
+        .mockRejectedValueOnce(new Error('failed background request'))
+        .mockResolvedValueOnce("second");
       const testMemFn = reMem(testFn, {
         maxAge: 100,
         staleWhileRevalidate: 500,
       });
+
       await expect(testMemFn()).resolves.toEqual("first");
+
+      // this triggers the revalidation request, which fails and is ignored
       jest.advanceTimersByTime(101);
       await expect(testMemFn()).resolves.toEqual("first");
-      // TODO verify the error is swallowed
+
+      // this triggers another revalidation request, which succeeds
+      await expect(testMemFn()).resolves.toEqual("first");
+
+      // the timers should have been reset by the last success
+      // so this should be a cache HIT
+      jest.advanceTimersByTime(50);
+      await expect(testMemFn()).resolves.toEqual("second");
+
+      expect(testFn).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -227,7 +240,6 @@ describe("reMem", () => {
         await expect(testMemFn()).rejects.toEqual(testError);
         expect(testFn).toHaveBeenCalledTimes(3);
       });
-
     });
   });
 
