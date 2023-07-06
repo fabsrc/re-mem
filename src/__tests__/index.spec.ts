@@ -143,6 +143,7 @@ describe("reMem", () => {
       await expect(testMemFn()).resolves.toEqual("first");
       jest.advanceTimersByTime(101);
       await expect(testMemFn()).resolves.toEqual("first");
+      // TODO verify the error is swallowed
     });
   });
 
