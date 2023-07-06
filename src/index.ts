@@ -135,6 +135,8 @@ function reMem<
       if (!cachePromiseRejection) {
         const cacheItem = cache.get(key);
 
+        // istanbul ignore next - infinitely cached items have no timeout
+        // see https://github.com/istanbuljs/istanbuljs/issues/526
         if (cacheItem?.timeout) {
           clearTimeout(cacheItem.timeout);
         }

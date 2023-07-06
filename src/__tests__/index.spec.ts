@@ -94,7 +94,7 @@ describe("reMem", () => {
       jest.useFakeTimers("modern");
     });
 
-    it("returns stale data after maxAge but before staleWhileRevalidate ends", async () => {
+    it("returns stale data before staleWhileRevalidate ends", async () => {
       const testFn = jest
         .fn()
         .mockResolvedValueOnce("first")
@@ -110,7 +110,7 @@ describe("reMem", () => {
       await expect(testMemFn()).resolves.toEqual("second");
     });
 
-    it("does not return stale data after maxAge + staleWhileRevalidate", async () => {
+    it("does not return stale data after staleWhileRevalidate", async () => {
       const testFn = jest
         .fn()
         .mockResolvedValueOnce("first")
@@ -129,6 +129,20 @@ describe("reMem", () => {
       await expect(testMemFn()).resolves.toEqual("third");
       jest.advanceTimersByTime(601);
       await expect(testMemFn()).resolves.toEqual("fourth");
+    });
+
+    it("ignores errors on background revalidation request", async () => {
+      const testFn = jest
+        .fn()
+        .mockResolvedValueOnce("first")
+        .mockRejectedValueOnce(new Error('failed background request'));
+      const testMemFn = reMem(testFn, {
+        maxAge: 100,
+        staleWhileRevalidate: 500,
+      });
+      await expect(testMemFn()).resolves.toEqual("first");
+      jest.advanceTimersByTime(101);
+      await expect(testMemFn()).resolves.toEqual("first");
     });
   });
 
