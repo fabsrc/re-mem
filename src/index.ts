@@ -97,7 +97,7 @@ function reMem<
         // always put a success in the cache
         const p = fnPromise.then((res) => {
           // no timeout is the first case in the outer if (no expiry)
-          clearTimeout(cacheItem.timeout as NodeJS.Timeout);
+          clearTimeout(cacheItem.timeout);
 
           setCacheItem(key, fnPromise, now);
 

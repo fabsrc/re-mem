@@ -50,9 +50,10 @@ describe("reMem", () => {
       expect(testCache.has("testKey")).toBe(true);
     });
   });
+
   describe("maxAge", () => {
     beforeEach(() => {
-      jest.useFakeTimers("modern");
+      jest.useFakeTimers();
     });
 
     it("returns cached promise for Infinity by default", async () => {
@@ -91,7 +92,7 @@ describe("reMem", () => {
 
   describe("staleWhileRevalidate", () => {
     beforeEach(() => {
-      jest.useFakeTimers("modern");
+      jest.useFakeTimers();
     });
 
     it("returns stale data before staleWhileRevalidate ends", async () => {
@@ -162,7 +163,7 @@ describe("reMem", () => {
 
   describe("staleIfError", () => {
     beforeEach(() => {
-      jest.useFakeTimers("modern");
+      jest.useFakeTimers();
     });
 
     describe("after maxAge and before staleIfError ends", () => {
