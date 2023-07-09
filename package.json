@@ -8,7 +8,11 @@
     "test": "jest",
     "prepare": "npm run build"
   },
-  "keywords": [],
+  "keywords": [
+    "memoization",
+    "stale-while-revalidate",
+    "stale-if-error"
+  ],
   "author": "Fabian Schneider <fabbbbbi+git@googlemail.com>",
   "license": "MIT",
   "devDependencies": {
@@ -23,6 +27,9 @@
   },
   "overrides": {
     "semver": ">=7.5.2"
+  },
+  "engines": {
+    "node": ">=16"
   },
   "files": [
     "dist/index.js",
