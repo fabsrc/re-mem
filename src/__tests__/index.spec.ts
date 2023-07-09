@@ -94,7 +94,7 @@ describe("reMem", () => {
       jest.useFakeTimers("modern");
     });
 
-    it("returns stale data after maxAge but before staleWhileRevalidate ends", async () => {
+    it("returns stale data before staleWhileRevalidate ends", async () => {
       const testFn = jest
         .fn()
         .mockResolvedValueOnce("first")
@@ -110,7 +110,7 @@ describe("reMem", () => {
       await expect(testMemFn()).resolves.toEqual("second");
     });
 
-    it("does not return stale data after maxAge + staleWhileRevalidate", async () => {
+    it("does not return stale data after staleWhileRevalidate", async () => {
       const testFn = jest
         .fn()
         .mockResolvedValueOnce("first")
@@ -130,6 +130,34 @@ describe("reMem", () => {
       jest.advanceTimersByTime(601);
       await expect(testMemFn()).resolves.toEqual("fourth");
     });
+
+    it("ignores errors on background revalidation request", async () => {
+      const testFn = jest
+        .fn()
+        .mockResolvedValueOnce("first")
+        .mockRejectedValueOnce(new Error('failed background request'))
+        .mockResolvedValueOnce("second");
+      const testMemFn = reMem(testFn, {
+        maxAge: 100,
+        staleWhileRevalidate: 500,
+      });
+
+      await expect(testMemFn()).resolves.toEqual("first");
+
+      // this triggers the revalidation request, which fails and is ignored
+      jest.advanceTimersByTime(101);
+      await expect(testMemFn()).resolves.toEqual("first");
+
+      // this triggers another revalidation request, which succeeds
+      await expect(testMemFn()).resolves.toEqual("first");
+
+      // the timers should have been reset by the last success
+      // so this should be a cache HIT
+      jest.advanceTimersByTime(50);
+      await expect(testMemFn()).resolves.toEqual("second");
+
+      expect(testFn).toHaveBeenCalledTimes(3);
+    });
   });
 
   describe("staleIfError", () => {
@@ -137,38 +165,81 @@ describe("reMem", () => {
       jest.useFakeTimers("modern");
     });
 
-    it("returns stale data on error after maxAge but before staleIfError ends", async () => {
-      const testError = new Error("testError");
-      const testFn = jest
-        .fn()
-        .mockResolvedValueOnce("first")
-        .mockRejectedValue(testError);
-      const testMemFn = reMem(testFn, {
-        maxAge: 100,
-        staleIfError: 500,
+    describe("after maxAge and before staleIfError ends", () => {
+      it("returns stale data on error", async () => {
+        const testError = new Error("testError");
+        const testFn = jest
+          .fn()
+          .mockResolvedValueOnce("first")
+          .mockRejectedValue(testError);
+        const testMemFn = reMem(testFn, {
+          maxAge: 100,
+          staleIfError: 500,
+        });
+        await expect(testMemFn()).resolves.toEqual("first");
+        jest.advanceTimersByTime(101);
+        await expect(testMemFn()).resolves.toEqual("first");
+        expect(testFn).toHaveBeenCalledTimes(2);
       });
-      await expect(testMemFn()).resolves.toEqual("first");
-      jest.advanceTimersByTime(101);
-      await expect(testMemFn()).resolves.toEqual("first");
-      expect(testFn).toHaveBeenCalledTimes(2);
+
+      it("repopulates cache on success", async () => {
+        const testError1 = new Error("testError 1");
+        const testError2 = new Error("testError 2");
+        const testFn = jest
+          .fn()
+          .mockResolvedValueOnce("first")
+          .mockRejectedValueOnce(testError1)
+          .mockResolvedValueOnce("second")
+          .mockRejectedValue(testError2);
+        const testMemFn = reMem(testFn, {
+          maxAge: 100,
+          staleIfError: 500,
+        });
+
+        // regular success (1 call)
+        await expect(testMemFn()).resolves.toEqual("first");
+
+        // maxAge expired, stale if error (2 calls)
+        jest.advanceTimersByTime(101);
+        await expect(testMemFn()).resolves.toEqual("first");
+
+        // maxAge expired, success again (3 calls)
+        // timers should be reset here
+        //jest.advanceTimersByTime(100);
+        await expect(testMemFn()).resolves.toEqual("second");
+
+        // here's where we test the cache is still valid
+        // maxAge, cached response
+        jest.advanceTimersByTime(50);
+        await expect(testMemFn()).resolves.toEqual("second");
+
+        // stale if error expired, error (4 calls)
+        // need to be beyond maxAge + staleIfError
+        jest.advanceTimersByTime(551);
+        await expect(testMemFn()).rejects.toEqual(testError2);
+
+        expect(testFn).toHaveBeenCalledTimes(4);
+      });
     });
 
-    it("does not return stale data on error after maxAge + staleIfError", async () => {
-      const testError = new Error("testError");
-      const testFn = jest
-        .fn()
-        .mockResolvedValueOnce("first")
-        .mockRejectedValue(testError);
-      const testMemFn = reMem(testFn, {
-        maxAge: 100,
-        staleWhileRevalidate: 500,
+    describe("after staleIfError ends", () => {
+      it("does not return stale data on error", async () => {
+        const testError = new Error("testError");
+        const testFn = jest
+          .fn()
+          .mockResolvedValueOnce("first")
+          .mockRejectedValue(testError);
+        const testMemFn = reMem(testFn, {
+          maxAge: 100,
+          staleIfError: 500,
+        });
+        await expect(testMemFn()).resolves.toEqual("first");
+        jest.advanceTimersByTime(101);
+        await expect(testMemFn()).resolves.toEqual("first");
+        jest.advanceTimersByTime(500);
+        await expect(testMemFn()).rejects.toEqual(testError);
+        expect(testFn).toHaveBeenCalledTimes(3);
       });
-      await expect(testMemFn()).resolves.toEqual("first");
-      jest.advanceTimersByTime(101);
-      await expect(testMemFn()).resolves.toEqual("first");
-      jest.advanceTimersByTime(500);
-      await expect(testMemFn()).rejects.toEqual(testError);
-      expect(testFn).toHaveBeenCalledTimes(3);
     });
   });
 
